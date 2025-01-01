@@ -22,13 +22,15 @@
         .container {
             width: 80%;
             margin: 0 auto;
+            margin-top:20px ;
+            margin-bottom: 20px;
             padding: 20px;
             background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
 
-        input, textarea, button {
+        input, textarea, button, input[type="file"] {
             width: 100%;
             padding: 12px;
             margin: 8px 0;
@@ -102,7 +104,9 @@
             <div id="encrypted" class="output"></div>
             <button id="copy" class="copy-btn">Copy Encrypted Data</button>
         </div>
+    </div>
 
+    <div class="container">
         <h2>Decrypt Data</h2>
         <div class="section">
             <input type="text" id="customKeyDecrypt" placeholder="Enter custom key for decryption" />
@@ -113,9 +117,33 @@
         </div>
     </div>
 
+    <!-- Third Container for Media Encryption and Decryption -->
+    <div class="container">
+        <h2>Encrypt and Decrypt Media (Image, Video, Audio)</h2>
+
+        <!-- Media Encryption -->
+        <div class="section">
+            <input type="file" id="mediaFile" accept="image/*,video/*,audio/*" />
+            <input type="text" id="mediaKeyEncrypt" placeholder="Enter custom key for media encryption" />
+            <button id="encryptMedia">Encrypt Media</button>
+            <p><strong>Encrypted Media:</strong></p>
+            <div id="encryptedMedia" class="output" style="height:20vh; overflow:auto;"></div>
+        </div>
+
+        <!-- Media Decryption (Automatic Decrypt on Click) -->
+        <div class="section">
+            <input type="text" id="mediaKeyDecrypt" placeholder="Enter custom key for media decryption" />
+            <button id="decryptMedia">Decrypt Media</button>
+            <p><strong>Decrypted Media:</strong></p>
+            <div id="decryptedMedia" class="output"></div>
+        </div>
+    </div>
+
     <script>
         let encryptionKey; // Will store the derived encryption key
         let encryptedData; // Will store the encrypted message and IV
+        let encryptedMediaData; // Store encrypted media data for later decryption
+        let decryptedMedia; // Store decrypted media for display
 
         // Encrypt function: Generates key and encrypts the message
         async function deriveKeyEncrypt(customKey) {
@@ -164,6 +192,43 @@
             };
         }
 
+        // Encrypt media file function
+        async function encryptMediaFile(file, key) {
+            const arrayBuffer = await file.arrayBuffer(); // Convert file to ArrayBuffer
+            const iv = crypto.getRandomValues(new Uint8Array(12)); // Initialization vector
+
+            const encrypted = await crypto.subtle.encrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv,
+                },
+                key,
+                arrayBuffer
+            );
+
+            return {
+                iv: Array.from(iv),
+                encryptedData: Array.from(new Uint8Array(encrypted)),
+            };
+        }
+
+        // Decrypt media file function
+        async function decryptMediaFile(encrypted, key) {
+            const iv = new Uint8Array(encrypted.iv); // Convert IV back to Uint8Array
+            const encryptedBytes = new Uint8Array(encrypted.encryptedData); // Convert data back to Uint8Array
+
+            const decrypted = await crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv,
+                },
+                key,
+                encryptedBytes
+            );
+
+            return new Blob([decrypted]); // Return as Blob (for media files)
+        }
+
         // Encrypt button click event
         document.getElementById("encrypt").addEventListener("click", async () => {
             const customKey = document.getElementById("customKeyEncrypt").value;
@@ -185,6 +250,52 @@
             document.getElementById("encrypted").textContent = JSON.stringify(encryptedData);
         });
 
+        // Encrypt media file button click event
+        document.getElementById("encryptMedia").addEventListener("click", async () => {
+            const customKey = document.getElementById("mediaKeyEncrypt").value;
+            const mediaFile = document.getElementById("mediaFile").files[0];
+
+            if (!customKey) {
+                alert("Please enter a custom key for media encryption!");
+                return;
+            }
+
+            if (!mediaFile) {
+                alert("Please select a media file to encrypt!");
+                return;
+            }
+
+            encryptionKey = await deriveKeyEncrypt(customKey);
+            encryptedMediaData = await encryptMediaFile(mediaFile, encryptionKey);
+
+            document.getElementById("encryptedMedia").textContent = JSON.stringify(encryptedMediaData);
+        });
+
+        // Decrypt media file button click event (automatic decryption using the encrypted media data)
+        document.getElementById("decryptMedia").addEventListener("click", async () => {
+            const customKey = document.getElementById("mediaKeyDecrypt").value;
+
+            if (!customKey) {
+                alert("Please enter a custom key for media decryption!");
+                return;
+            }
+
+            if (!encryptedMediaData) {
+                alert("No encrypted media available to decrypt. Please encrypt a media file first.");
+                return;
+            }
+
+            try {
+                encryptionKey = await deriveKeyEncrypt(customKey);
+                decryptedMedia = await decryptMediaFile(encryptedMediaData, encryptionKey);
+
+                const url = URL.createObjectURL(decryptedMedia); // Create URL for the decrypted media
+                document.getElementById("decryptedMedia").innerHTML = `<video controls><source src="${url}" type="video/mp4"></video>`; // You can change the media type as needed
+            } catch (error) {
+                alert("Failed to decrypt the media. Please check the key and try again.");
+            }
+        });
+
         // Copy encrypted data to clipboard
         document.getElementById("copy").addEventListener("click", () => {
             const encryptedText = document.getElementById("encrypted").textContent;
@@ -197,74 +308,6 @@
             navigator.clipboard.writeText(encryptedText)
                 .then(() => alert("Encrypted data copied to clipboard!"))
                 .catch(() => alert("Failed to copy encrypted data."));
-        });
-
-        // Decrypt function: Derives key and decrypts message
-        async function deriveKeyDecrypt(customKey) {
-            const encoder = new TextEncoder();
-            const keyMaterial = await crypto.subtle.importKey(
-                "raw",
-                encoder.encode(customKey),
-                "PBKDF2",
-                false,
-                ["deriveKey"]
-            );
-
-            return await crypto.subtle.deriveKey(
-                {
-                    name: "PBKDF2",
-                    salt: new Uint8Array(16), // A static salt (use a secure salt in production)
-                    iterations: 100000,
-                    hash: "SHA-256",
-                },
-                keyMaterial,
-                { name: "AES-GCM", length: 256 },
-                false,
-                ["decrypt"]
-            );
-        }
-
-        // Decrypt function
-        async function decryptData(encrypted, key) {
-            const iv = new Uint8Array(encrypted.iv); // Convert IV back to Uint8Array
-            const encryptedBytes = new Uint8Array(encrypted.encryptedData); // Convert data back to Uint8Array
-
-            const decrypted = await crypto.subtle.decrypt(
-                {
-                    name: "AES-GCM",
-                    iv: iv,
-                },
-                key,
-                encryptedBytes
-            );
-
-            const decoder = new TextDecoder();
-            return decoder.decode(decrypted);
-        }
-
-        // Decrypt button click event
-        document.getElementById("decrypt").addEventListener("click", async () => {
-            const customKey = document.getElementById("customKeyDecrypt").value;
-            const encryptedInput = document.getElementById("encryptedInput").value;
-
-            if (!customKey) {
-                alert("Please enter the custom key for decryption!");
-                return;
-            }
-
-            if (!encryptedInput) {
-                alert("Please enter encrypted data to decrypt!");
-                return;
-            }
-
-            try {
-                const encrypted = JSON.parse(encryptedInput); // Parse the input as JSON
-                encryptionKey = await deriveKeyDecrypt(customKey);
-                const decryptedMessage = await decryptData(encrypted, encryptionKey);
-                document.getElementById("decrypted").textContent = decryptedMessage;
-            } catch (error) {
-                alert("Failed to parse encrypted data or decrypt. Please check the input.");
-            }
         });
     </script>
 </body>
