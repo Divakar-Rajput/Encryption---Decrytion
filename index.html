@@ -1,0 +1,79 @@
+<p><!DOCTYPE html> <html lang=&quot;en&quot;> <head>  <meta charset=&quot;UTF-8&quot;>  <meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;>  <title>Encrypt and Decrypt Data with Custom Key</title>  <style>  body {  font-family: Arial, sans-serif;  background-color: #f0f4f8;  margin: 0;  padding: 0;  color: #333;  }</p>
+
+<p> h1, h2 {  text-align: center;  color: #333;  margin-top: 30px;  }</p>
+
+<p> .container {  width: 80%;  margin: 0 auto;  padding: 20px;  background-color: #fff;  border-radius: 8px;  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  }</p>
+
+<p> input, textarea, button {  width: 100%;  padding: 12px;  margin: 8px 0;  border: 2px solid #ccc;  border-radius: 4px;  box-sizing: border-box;  }</p>
+
+<p> input:focus, textarea:focus, button:focus {  border-color: #007bff;  outline: none;  }</p>
+
+<p> button {  background-color: #007bff;  color: #fff;  font-weight: bold;  cursor: pointer;  transition: background-color 0.3s;  }</p>
+
+<p> button:hover {  background-color: #0056b3;  }</p>
+
+<p> .output {  background-color: #f7f7f7;  padding: 15px;  border: 1px solid #ccc;  border-radius: 4px;  margin-top: 15px;  word-wrap: break-word;  }</p>
+
+<p> .output p {  margin: 0;  }</p>
+
+<p> .copy-btn {  background-color: #28a745;  }</p>
+
+<p> .copy-btn:hover {  background-color: #218838;  }</p>
+
+<p> .alert {  color: #e74c3c;  font-weight: bold;  text-align: center;  }</p>
+
+<p> .section {  margin-bottom: 40px;  }</p>
+
+<p> .section:last-child {  margin-bottom: 0;  }  </style> </head> <body>  <div class=&quot;container&quot;>  <h1>Encrypt Data with Web Crypto API</h1></p>
+
+<p> <div class=&quot;section&quot;>  <input type=&quot;text&quot; id=&quot;customKeyEncrypt&quot; placeholder=&quot;Enter custom key for encryption&quot; />  <input type=&quot;text&quot; id=&quot;message&quot; placeholder=&quot;Enter message to encrypt&quot; />  <button id=&quot;encrypt&quot;>Encrypt</button>  <p><strong>Encrypted Data:</strong></p>  <div id=&quot;encrypted&quot; class=&quot;output&quot;></div>  <button id=&quot;copy&quot; class=&quot;copy-btn&quot;>Copy Encrypted Data</button>  </div></p>
+
+<p> <h2>Decrypt Data</h2>  <div class=&quot;section&quot;>  <input type=&quot;text&quot; id=&quot;customKeyDecrypt&quot; placeholder=&quot;Enter custom key for decryption&quot; />  <textarea id=&quot;encryptedInput&quot; placeholder=&quot;Paste encrypted data here&quot; rows=&quot;4&quot; cols=&quot;50&quot;></textarea>  <button id=&quot;decrypt&quot;>Decrypt</button>  <p><strong>Decrypted Message:</strong></p>  <div id=&quot;decrypted&quot; class=&quot;output&quot;></div>  </div>  </div></p>
+
+<p> <script>  let encryptionKey; // Will store the derived encryption key  let encryptedData; // Will store the encrypted message and IV</p>
+
+<p> // Encrypt function: Generates key and encrypts the message  async function deriveKeyEncrypt(customKey) {  const encoder = new TextEncoder();  const keyMaterial = await crypto.subtle.importKey(  &quot;raw&quot;,  encoder.encode(customKey),  &quot;PBKDF2&quot;,  false,  [&quot;deriveKey&quot;]  );</p>
+
+<p> return await crypto.subtle.deriveKey(  {  name: &quot;PBKDF2&quot;,  salt: new Uint8Array(16), // A static salt (use a secure salt in production)  iterations: 100000,  hash: &quot;SHA-256&quot;,  },  keyMaterial,  { name: &quot;AES-GCM&quot;, length: 256 },  false,  [&quot;encrypt&quot;]  );  }</p>
+
+<p> // Encrypt message using derived key  async function encryptData(message, key) {  const encoder = new TextEncoder();  const encodedMessage = encoder.encode(message);</p>
+
+<p> const iv = crypto.getRandomValues(new Uint8Array(12)); // Initialization vector</p>
+
+<p> const encrypted = await crypto.subtle.encrypt(  {  name: &quot;AES-GCM&quot;,  iv: iv,  },  key,  encodedMessage  );</p>
+
+<p> return {  iv: Array.from(iv),  encryptedData: Array.from(new Uint8Array(encrypted)),  };  }</p>
+
+<p> // Encrypt button click event  document.getElementById(&quot;encrypt&quot;).addEventListener(&quot;click&quot;, async () => {  const customKey = document.getElementById(&quot;customKeyEncrypt&quot;).value;  const message = document.getElementById(&quot;message&quot;).value;</p>
+
+<p> if (!customKey) {  alert(&quot;Please enter a custom key for encryption!&quot;);  return;  }</p>
+
+<p> if (!message) {  alert(&quot;Please enter a message to encrypt!&quot;);  return;  }</p>
+
+<p> encryptionKey = await deriveKeyEncrypt(customKey);  encryptedData = await encryptData(message, encryptionKey);</p>
+
+<p> document.getElementById(&quot;encrypted&quot;).textContent = JSON.stringify(encryptedData);  });</p>
+
+<p> // Copy encrypted data to clipboard  document.getElementById(&quot;copy&quot;).addEventListener(&quot;click&quot;, () => {  const encryptedText = document.getElementById(&quot;encrypted&quot;).textContent;</p>
+
+<p> if (!encryptedText) {  alert(&quot;No encrypted data to copy!&quot;);  return;  }</p>
+
+<p> navigator.clipboard.writeText(encryptedText)  .then(() => alert(&quot;Encrypted data copied to clipboard!&quot;))  .catch(() => alert(&quot;Failed to copy encrypted data.&quot;));  });</p>
+
+<p> // Decrypt function: Derives key and decrypts message  async function deriveKeyDecrypt(customKey) {  const encoder = new TextEncoder();  const keyMaterial = await crypto.subtle.importKey(  &quot;raw&quot;,  encoder.encode(customKey),  &quot;PBKDF2&quot;,  false,  [&quot;deriveKey&quot;]  );</p>
+
+<p> return await crypto.subtle.deriveKey(  {  name: &quot;PBKDF2&quot;,  salt: new Uint8Array(16), // A static salt (use a secure salt in production)  iterations: 100000,  hash: &quot;SHA-256&quot;,  },  keyMaterial,  { name: &quot;AES-GCM&quot;, length: 256 },  false,  [&quot;decrypt&quot;]  );  }</p>
+
+<p> // Decrypt function  async function decryptData(encrypted, key) {  const iv = new Uint8Array(encrypted.iv); // Convert IV back to Uint8Array  const encryptedBytes = new Uint8Array(encrypted.encryptedData); // Convert data back to Uint8Array</p>
+
+<p> const decrypted = await crypto.subtle.decrypt(  {  name: &quot;AES-GCM&quot;,  iv: iv,  },  key,  encryptedBytes  );</p>
+
+<p> const decoder = new TextDecoder();  return decoder.decode(decrypted);  }</p>
+
+<p> // Decrypt button click event  document.getElementById(&quot;decrypt&quot;).addEventListener(&quot;click&quot;, async () => {  const customKey = document.getElementById(&quot;customKeyDecrypt&quot;).value;  const encryptedInput = document.getElementById(&quot;encryptedInput&quot;).value;</p>
+
+<p> if (!customKey) {  alert(&quot;Please enter the custom key for decryption!&quot;);  return;  }</p>
+
+<p> if (!encryptedInput) {  alert(&quot;Please enter encrypted data to decrypt!&quot;);  return;  }</p>
+
+<p> try {  const encrypted = JSON.parse(encryptedInput); // Parse the input as JSON  encryptionKey = await deriveKeyDecrypt(customKey);  const decryptedMessage = await decryptData(encrypted, encryptionKey);  document.getElementById(&quot;decrypted&quot;).textContent = decryptedMessage;  } catch (error) {  alert(&quot;Failed to parse encrypted data or decrypt. Please check the input.&quot;);  }  });  </script> </body> </html></p>
